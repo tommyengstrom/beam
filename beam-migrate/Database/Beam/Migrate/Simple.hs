@@ -235,7 +235,7 @@ autoMigrate BeamMigrationBackend { backendActionProvider = actions
            _ -> Fail.fail "autoMigrate: Not performing automatic migration due to data loss"
 
 partialAutoMigrate
-    :: (Database be db, Fail.MonadFail m, Show (BeamSqlBackendSyntax be))
+    :: (Database be db, Fail.MonadFail m)
     => BeamMigrationBackend be m
     -> CheckedDatabaseSettings be db
     -> IgnorePredicates
