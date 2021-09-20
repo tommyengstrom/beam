@@ -3,7 +3,7 @@
 -- | Utility functions for common use cases
 module Database.Beam.Migrate.Simple
   ( autoMigrate
-  , partialAutoMigrate
+  , constructPartialAutoMigrate
   , simpleSchema
   , simpleMigration
   , runSimpleMigration
@@ -234,25 +234,31 @@ autoMigrate BeamMigrationBackend { backendActionProvider = actions
            MigrationKeepsData -> mapM_ (runNoReturn . migrationCommand) cmds
            _ -> Fail.fail "autoMigrate: Not performing automatic migration due to data loss"
 
-partialAutoMigrate
-    :: (Database be db, Fail.MonadFail m, Show (BeamSqlBackendSyntax be))
+constructPartialAutoMigrate
+    :: (Database be db, Monad m, Show (BeamSqlBackendSyntax be))
     => BeamMigrationBackend be m
     -> CheckedDatabaseSettings be db
     -> IgnorePredicates
-    -> m ()
-partialAutoMigrate BeamMigrationBackend { backendActionProvider = actions, backendGetDbConstraints = getCs } db (IgnorePredicates ignore)
+    -> (MigrationCommand be -> String) -- ^ How to render errors
+    -> m (Either [String] [BeamSqlBackendSyntax be])
+constructPartialAutoMigrate BeamMigrationBackend { backendActionProvider = actions
+                                                 , backendGetDbConstraints = getCs } 
+                            db 
+                            (IgnorePredicates ignore) 
+                            renderError
     = do
         actual <- filter (getAny . ignore) <$> getCs
         let expected = collectChecks db
         case finalSolution (heuristicSolver actions actual expected) of
-            Candidates{} -> Fail.fail "partialAutoMigrate: Could not determine migration"
-            Solved cmds  ->
+            Candidates{} ->
+                Fail.fail "constructPartialAutoMigrate: Could not determine migration"
+            Solved cmds ->
               -- Check if any of the commands are irreversible
-                            case foldMap migrationCommandDataLossPossible cmds of
-                MigrationKeepsData -> mapM_ (runNoReturn . migrationCommand) cmds
-                _                  -> Fail.fail $ 
-                    "partialAutoMigrate: Not performing automatic migration due to data loss"
-                    <> show cmds
+                           case foldMap migrationCommandDataLossPossible cmds of
+                MigrationKeepsData -> pure $ Right $ fmap migrationCommand cmds
+                MigrationLosesData -> pure . Left . fmap renderError $ filter
+                    ((/= MigrationKeepsData) . migrationCommandDataLossPossible)
+                    cmds
 
 -- | Given a migration backend, a handle to a database, and a checked database,
 -- attempt to find a schema. This should always return 'Just', unless the

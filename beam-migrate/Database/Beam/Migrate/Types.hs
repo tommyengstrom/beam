@@ -95,7 +95,7 @@ data MigrationDataLoss
     -- ^ The command loses data
   | MigrationKeepsData
     -- ^ The command keeps all data
-  deriving Show
+  deriving (Show, Eq)
 
 instance Semigroup MigrationDataLoss where
     (<>) = mappend
