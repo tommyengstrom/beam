@@ -248,7 +248,7 @@ partialAutoMigrate BeamMigrationBackend { backendActionProvider = actions
                             renderError
     = do
         actual <- filter (getAny . ignore) <$> getCs
-        let expected = collectChecks db
+        let expected = filter (getAny . ignore) $ collectChecks db
         case finalSolution (heuristicSolver actions actual expected) of
             Candidates{} ->
                 Fail.fail "partialAutoMigrate: Could not determine migration"
