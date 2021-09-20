@@ -3,6 +3,7 @@
 -- | Utility functions for common use cases
 module Database.Beam.Migrate.Simple
   ( autoMigrate
+  , partialAutoMigrate
   , simpleSchema
   , simpleMigration
   , runSimpleMigration
@@ -232,6 +233,25 @@ autoMigrate BeamMigrationBackend { backendActionProvider = actions
          case foldMap migrationCommandDataLossPossible cmds of
            MigrationKeepsData -> mapM_ (runNoReturn . migrationCommand) cmds
            _ -> Fail.fail "autoMigrate: Not performing automatic migration due to data loss"
+
+partialAutoMigrate
+    :: (Database be db, Fail.MonadFail m)
+    => BeamMigrationBackend be m
+    -> CheckedDatabaseSettings be db
+    -> IgnorePredicates
+    -> m ()
+partialAutoMigrate BeamMigrationBackend { backendActionProvider = actions, backendGetDbConstraints = getCs } db (IgnorePredicates ignore)
+    = do
+        actual <- filter (getAny . ignore) <$> getCs
+        let expected = collectChecks db
+        case finalSolution (heuristicSolver actions actual expected) of
+            Candidates{} -> Fail.fail "autoMigrate: Could not determine migration"
+            Solved cmds  ->
+              -- Check if any of the commands are irreversible
+                            case foldMap migrationCommandDataLossPossible cmds of
+                MigrationKeepsData -> mapM_ (runNoReturn . migrationCommand) cmds
+                _                  -> Fail.fail
+                    "autoMigrate: Not performing automatic migration due to data loss"
 
 -- | Given a migration backend, a handle to a database, and a checked database,
 -- attempt to find a schema. This should always return 'Just', unless the
