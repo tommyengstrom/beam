@@ -235,7 +235,7 @@ autoMigrate BeamMigrationBackend { backendActionProvider = actions
            _ -> Fail.fail "autoMigrate: Not performing automatic migration due to data loss"
 
 partialAutoMigrate
-    :: (Database be db, Fail.MonadFail m)
+    :: (Database be db, Fail.MonadFail m, Show (BeamSqlBackendSyntax be))
     => BeamMigrationBackend be m
     -> CheckedDatabaseSettings be db
     -> IgnorePredicates
@@ -245,13 +245,14 @@ partialAutoMigrate BeamMigrationBackend { backendActionProvider = actions, backe
         actual <- filter (getAny . ignore) <$> getCs
         let expected = collectChecks db
         case finalSolution (heuristicSolver actions actual expected) of
-            Candidates{} -> Fail.fail "autoMigrate: Could not determine migration"
+            Candidates{} -> Fail.fail "partialAutoMigrate: Could not determine migration"
             Solved cmds  ->
               -- Check if any of the commands are irreversible
                             case foldMap migrationCommandDataLossPossible cmds of
                 MigrationKeepsData -> mapM_ (runNoReturn . migrationCommand) cmds
-                _                  -> Fail.fail
-                    "autoMigrate: Not performing automatic migration due to data loss"
+                _                  -> Fail.fail $ 
+                    "partialAutoMigrate: Not performing automatic migration due to data loss"
+                    <> show cmds
 
 -- | Given a migration backend, a handle to a database, and a checked database,
 -- attempt to find a schema. This should always return 'Just', unless the
